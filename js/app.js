@@ -102,6 +102,17 @@ async function requestRevision() {
     alert("Feedback sent to the team! 🔄");
 }
 
+async function submitAssets() {
+    const link = document.getElementById('asset-link').value;
+    if(!link) return alert("Please paste a link!");
+    
+    await db.collection('projects').doc(currentPid).update({
+        rawAssets: link,
+        assetSubmittedAt: new Date().toISOString()
+    });
+    document.getElementById('asset-status').style.display = 'block';
+}
+
 // ─── INIT ───
 auth.onAuthStateChanged(user => {
     if(user) handleUser(user);

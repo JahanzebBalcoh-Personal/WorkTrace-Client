@@ -267,6 +267,17 @@
             </div>
         </div>
 
+        <!-- ASSET SUBMISSION -->
+        <div class="status-card" style="border: 1px solid rgba(255,184,0,0.2); background:rgba(255,184,0,0.02);">
+            <span class="status-label">Project Assets</span>
+            <p style="font-size:12px; color:var(--muted); margin-bottom:20px;">Please provide the link to your raw footage (Google Drive/Dropbox).</p>
+            <div style="display:flex; gap:10px;">
+                <input type="text" id="asset-link" placeholder="Paste link here..." style="flex:1; background:var(--bg); border:1px solid var(--border); padding:12px; border-radius:12px; color:#fff; outline:none;">
+                <button onclick="submitAssets()" style="background:var(--accent); color:#000; border:none; padding:12px 24px; border-radius:12px; font-weight:800; cursor:pointer;">Send Assets</button>
+            </div>
+            <div id="asset-status" style="margin-top:15px; font-size:11px; color:var(--green); display:none;">✅ Assets linked successfully!</div>
+        </div>
+
         <div class="actions">
             <div class="action-card" onclick="requestRevision()">
                 <div style="font-size:24px; margin-bottom:10px;">🔄</div>
