@@ -13,104 +13,110 @@ if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 const auth = firebase.auth();
 
-let currentPid = null;
-
 // ─── AUTHENTICATION ───
 function login() {
     const provider = new firebase.auth.GoogleAuthProvider();
-    auth.signInWithPopup(provider).catch(e => console.error(e));
+    auth.signInWithPopup(provider)
+        .then(() => console.log("Login successful"))
+        .catch(e => {
+            console.error(e);
+            alert("Login Error: " + e.message + "\n\nNote: Google Login might not work on 'file://' links. Try using a local server or deploying it.");
+        });
 }
 
 async function handleUser(user) {
     if(!user) return;
     await db.collection('users').doc(user.email).set({
-        name: user.displayName, email: user.email, role: 'client', lastActive: new Date().toISOString()
+        name: user.displayName || 'User', email: user.email, role: 'client', lastActive: new Date().toISOString()
     }, { merge: true });
 
     document.getElementById('auth-overlay').style.display = 'none';
-    const pid = getProjectId();
-    if(pid) {
-        currentPid = pid;
-        loadProjectData(pid, user.email);
-    }
+    
+    // Update Sidebar
+    document.getElementById('user-name').textContent = user.displayName || 'User';
+    document.getElementById('user-email').textContent = user.email;
+    
+    const initials = (user.displayName || user.email || 'U')
+        .split(' ')
+        .map(n => n[0])
+        .join('')
+        .toUpperCase()
+        .slice(0, 2);
+    document.getElementById('user-initials').textContent = initials;
+
+    loadWorkspaceData(user.email);
 }
 
-function getProjectId() { return new URLSearchParams(window.location.search).get('p'); }
+function loadWorkspaceData(userEmail) {
+    // Listen to all projects for this client
+    db.collection('projects')
+      .where('clientEmail', '==', userEmail)
+      .onSnapshot(snapshot => {
+          renderWorkspace(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      });
 
-function loadProjectData(id, userEmail) {
-    db.collection('projects').doc(id).onSnapshot(doc => {
-        if(doc.exists) {
-            const p = doc.data();
-            if(p.clientEmail === userEmail || p.allowPublicView) renderProject(p);
-            else { alert("Access Denied."); auth.signOut(); }
-        }
-    });
+    // Also listen to public projects if any
+    db.collection('projects')
+      .where('allowPublicView', '==', true)
+      .onSnapshot(snapshot => {
+          // This might overlap, but for simplicity:
+          const publicProjects = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          // We can merge these or just use the first listener if it covers everything
+      });
 }
 
 // ─── RENDERING ───
-function renderProject(p) {
-    document.getElementById('project-title').textContent = p.name;
-    document.getElementById('current-phase').textContent = p.currentPhase || 'Discovery';
+function renderWorkspace(projects) {
+    // Reset counts and containers
+    const categories = ['todo', 'progress', 'revisions', 'supervisor', 'approved', 'posted'];
+    const counts = { todo: 0, progress: 0, revisions: 0, supervisor: 0, approved: 0, posted: 0 };
     
-    // Timeline
-    updateTimeline(p.step || 1);
+    categories.forEach(cat => {
+        document.getElementById(`items-${cat}`).innerHTML = '';
+    });
 
-    // Review Section
-    const reviewBox = document.getElementById('review-section');
-    if(p.status === 'Review' && p.editorLink) {
-        reviewBox.style.display = 'block';
-        document.getElementById('work-link').href = p.editorLink;
-    } else {
-        reviewBox.style.display = 'none';
-    }
+    projects.forEach(p => {
+        const status = (p.status || 'todo').toLowerCase();
+        const container = document.getElementById(`items-${status}`);
+        if(container) {
+            counts[status]++;
+            const item = createProjectItem(p);
+            container.appendChild(item);
+        }
+    });
 
-    // Billing
-    document.getElementById('total-price').textContent = '$' + (p.revenue || 0).toLocaleString();
-    const balance = (p.revenue || 0) - (p.paidAmount || 0);
-    document.getElementById('balance-due').textContent = '$' + balance.toLocaleString();
-}
-
-function updateTimeline(step) {
-    const steps = document.querySelectorAll('.t-step');
-    steps.forEach((el, idx) => {
-        if(idx < step) { el.classList.add('active'); el.querySelector('.t-dot').textContent = '✓'; }
-        else { el.classList.remove('active'); el.querySelector('.t-dot').textContent = String(idx + 1).padStart(2, '0'); }
+    // Update UI counts
+    categories.forEach(cat => {
+        const countEl = document.querySelector(`#cat-${cat} .cat-count`);
+        if(countEl) countEl.textContent = counts[cat] > 0 ? counts[cat] : '+ 0';
     });
 }
 
-// ─── ACTIONS ───
-async function approveWork() {
-    if(confirm("Are you satisfied with the work? This will move project to Completion.")) {
-        await db.collection('projects').doc(currentPid).update({
-            status: 'Completed',
-            step: 5,
-            progress: 100,
-            currentPhase: 'Delivered'
-        });
-        alert("Project marked as Completed! 🎉");
-    }
-}
-
-async function requestRevision() {
-    const feedback = prompt("Please provide your feedback / revision requests:");
-    if(!feedback) return;
-    await db.collection('projects').doc(currentPid).update({
-        status: 'Active',
-        feedback: feedback,
-        currentPhase: 'Revision Requested'
-    });
-    alert("Feedback sent to the team! 🔄");
-}
-
-async function submitAssets() {
-    const link = document.getElementById('asset-link').value;
-    if(!link) return alert("Please paste a link!");
+function createProjectItem(p) {
+    const item = document.createElement('div');
+    item.className = 'project-item';
+    item.onclick = () => { if(p.editorLink) window.open(p.editorLink, '_blank'); };
     
-    await db.collection('projects').doc(currentPid).update({
-        rawAssets: link,
-        assetSubmittedAt: new Date().toISOString()
-    });
-    document.getElementById('asset-status').style.display = 'block';
+    const date = p.assetSubmittedAt ? new Date(p.assetSubmittedAt).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit' }) : '04/23';
+    const size = p.fileSize || '259.2 MB';
+    const version = p.version || 'V2';
+
+    item.innerHTML = `
+        <div class="item-thumb">
+            <img src="${p.thumbnail || 'https://via.placeholder.com/80x50/2a2a2a/ffffff?text=Video'}" alt="Thumb">
+        </div>
+        <div class="item-details">
+            <div class="item-title">[${p.editorName || 'NextWave_Bob'}]_${p.name || 'Project Title'}</div>
+            <div class="item-meta">
+                <span>${date}</span>
+                <span>•</span>
+                <span>${size}</span>
+                <span>•</span>
+                <span style="color: var(--accent); font-weight: 800;">${version}</span>
+            </div>
+        </div>
+    `;
+    return item;
 }
 
 // ─── INIT ───
