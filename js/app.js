@@ -67,28 +67,43 @@ function loadWorkspaceData(userEmail) {
 
 // ─── RENDERING ───
 function renderWorkspace(projects) {
-    // Reset counts and containers
-    const categories = ['todo', 'progress', 'revisions', 'supervisor', 'approved', 'posted'];
-    const counts = { todo: 0, progress: 0, revisions: 0, supervisor: 0, approved: 0, posted: 0 };
-    
-    categories.forEach(cat => {
-        document.getElementById(`items-${cat}`).innerHTML = '';
-    });
+    const categories = [
+        { id: 'todo', name: 'To Do', color: 'var(--todo-color)' },
+        { id: 'progress', name: 'In Progress', color: 'var(--progress-color)' },
+        { id: 'revisions', name: 'Revisions', color: 'var(--revisions-color)' },
+        { id: 'supervisor', name: 'Supervisor', color: 'var(--supervisor-color)' },
+        { id: 'approved', name: 'Approved', color: 'var(--approved-color)' },
+        { id: 'posted', name: 'Posted', color: 'var(--posted-color)' }
+    ];
 
-    projects.forEach(p => {
-        const status = (p.status || 'todo').toLowerCase();
-        const container = document.getElementById(`items-${status}`);
-        if(container) {
-            counts[status]++;
-            const item = createProjectItem(p);
-            container.appendChild(item);
-        }
-    });
+    const container = document.getElementById('status-groups');
+    container.innerHTML = ''; // Clear previous
 
-    // Update UI counts
     categories.forEach(cat => {
-        const countEl = document.querySelector(`#cat-${cat} .cat-count`);
-        if(countEl) countEl.textContent = counts[cat] > 0 ? counts[cat] : '+ 0';
+        const catProjects = projects.filter(p => (p.status || 'todo').toLowerCase() === cat.id);
+        
+        const catEl = document.createElement('div');
+        catEl.className = `category ${cat.id === 'supervisor' ? 'active' : ''}`;
+        catEl.id = `cat-${cat.id}`;
+        
+        catEl.innerHTML = `
+            <div class="category-header" onclick="toggleCategory('cat-${cat.id}')">
+                <div class="cat-info">
+                    <span class="chevron">❯</span>
+                    <div class="cat-dot" style="background: ${cat.color}; box-shadow: 0 0 10px ${cat.color}66;"></div>
+                    <span class="cat-name">${cat.name}</span>
+                </div>
+                <span class="cat-count">${catProjects.length}</span>
+            </div>
+            <div class="cat-items" id="items-${cat.id}"></div>
+        `;
+        
+        container.appendChild(catEl);
+        
+        const itemsContainer = catEl.querySelector(`#items-${cat.id}`);
+        catProjects.forEach(p => {
+            itemsContainer.appendChild(createProjectItem(p));
+        });
     });
 }
 
@@ -100,20 +115,24 @@ function createProjectItem(p) {
     const date = p.assetSubmittedAt ? new Date(p.assetSubmittedAt).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit' }) : '04/23';
     const size = p.fileSize || '259.2 MB';
     const version = p.version || 'V2';
+    const status = (p.status || 'todo').toUpperCase();
 
     item.innerHTML = `
         <div class="item-thumb">
-            <img src="${p.thumbnail || 'https://via.placeholder.com/80x50/2a2a2a/ffffff?text=Video'}" alt="Thumb">
+            <img src="${p.thumbnail || 'https://images.unsplash.com/photo-1611162617474-5b21e879e113?auto=format&fit=crop&w=150&q=80'}" alt="Thumb">
         </div>
         <div class="item-details">
-            <div class="item-title">[${p.editorName || 'NextWave_Bob'}]_${p.name || 'Project Title'}</div>
+            <div class="item-title">${p.name || 'Untitled Project'}</div>
             <div class="item-meta">
+                <span class="status-pill">${status}</span>
+                <span>•</span>
                 <span>${date}</span>
                 <span>•</span>
                 <span>${size}</span>
-                <span>•</span>
-                <span style="color: var(--accent); font-weight: 800;">${version}</span>
             </div>
+        </div>
+        <div style="display:flex; align-items:center; color:var(--text-muted); font-size:18px;">
+            <span>❯</span>
         </div>
     `;
     return item;
