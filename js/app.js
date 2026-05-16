@@ -143,3 +143,96 @@ auth.onAuthStateChanged(user => {
     if(user) handleUser(user);
     else document.getElementById('auth-overlay').style.display = 'flex';
 });
+
+window.addEventListener('worktrace-upload', e => {
+    uploadRawData(e.detail.files);
+});
+
+async function uploadRawData(files) {
+    const user = auth.currentUser;
+    if(!user) return;
+
+    for (const file of files) {
+        const storageRef = firebase.storage().ref(`workspaces/${user.email}/raw/${file.name}`);
+        const uploadTask = storageRef.put(file);
+
+        uploadTask.on('state_changed', 
+            (snapshot) => {
+                // Progress tracking if needed
+            }, 
+            (error) => console.error(error), 
+            async () => {
+                const downloadURL = await uploadTask.snapshot.ref.getDownloadURL();
+                // Save record to Firestore
+                await db.collection('workspaces').doc(user.email).collection('files').add({
+                    name: file.name,
+                    size: file.size,
+                    url: downloadURL,
+                    uploadedAt: new Date().toISOString(),
+                    type: file.type
+                });
+                
+                // Update workspace usage
+                const wsRef = db.collection('workspaces').doc(user.email);
+                const wsDoc = await wsRef.get();
+                const currentUsage = wsDoc.exists ? (wsDoc.data().usedBytes || 0) : 0;
+                const newUsage = currentUsage + file.size;
+                await wsRef.set({ usedBytes: newUsage }, { merge: true });
+                
+                // Also update user doc for Admin visibility
+                await db.collection('users').doc(user.email).set({ usedBytes: newUsage }, { merge: true });
+                
+                alert(`Uploaded: ${file.name}`);
+            }
+        );
+    }
+}
+
+function listenToStorage(userEmail) {
+    db.collection('workspaces').doc(userEmail).onSnapshot(doc => {
+        const data = doc.exists ? doc.data() : { usedBytes: 0, totalBytes: 100 * 1024 * 1024 * 1024 };
+        const used = data.usedBytes || 0;
+        const total = data.totalBytes || (100 * 1024 * 1024 * 1024);
+        const pct = Math.min(100, Math.round((used / total) * 100));
+
+        document.getElementById('storage-bar').style.width = pct + '%';
+        document.getElementById('storage-pct').textContent = pct + '%';
+        document.getElementById('storage-used').textContent = (used / (1024 ** 3)).toFixed(1) + ' GB';
+        document.getElementById('storage-total').textContent = (total / (1024 ** 3)).toFixed(0) + ' GB';
+    });
+
+    db.collection('workspaces').doc(userEmail).collection('files').orderBy('uploadedAt', 'desc').onSnapshot(snap => {
+        const fileList = document.getElementById('file-list');
+        if(snap.empty) return;
+
+        fileList.innerHTML = snap.docs.map(doc => {
+            const f = doc.data();
+            const size = (f.size / (1024 * 1024)).toFixed(1) + ' MB';
+            return `
+                <div class="project-item" style="cursor: default;">
+                    <div class="item-thumb" style="display:flex; align-items:center; justify-content:center; background: rgba(0, 209, 255, 0.05); color: var(--secondary); font-size: 24px;">
+                        📄
+                    </div>
+                    <div class="item-details">
+                        <div class="item-title">${f.name}</div>
+                        <div class="item-meta">
+                            <span>${size}</span>
+                            <span>•</span>
+                            <span>${new Date(f.uploadedAt).toLocaleDateString()}</span>
+                        </div>
+                    </div>
+                    <div style="display:flex; align-items:center; gap: 10px;">
+                        <button onclick="window.open('${f.url}', '_blank')" style="background:transparent; border:1px solid var(--border); color:var(--accent); padding:8px 12px; border-radius:10px; font-size:11px; font-weight:800; cursor:pointer;">DOWNLOAD</button>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    });
+}
+
+// Update handleUser to include storage listener
+const originalHandleUser = handleUser;
+handleUser = async function(user) {
+    await originalHandleUser(user);
+    listenToStorage(user.email);
+}

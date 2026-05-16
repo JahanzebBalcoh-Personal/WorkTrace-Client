@@ -238,6 +238,32 @@
             box-shadow: 0 10px 20px var(--accent-glow);
         }
 
+        /* Storage Progress */
+        .storage-widget {
+            margin-top: 30px;
+            padding: 20px;
+            background: rgba(255,255,255,0.03);
+            border-radius: 20px;
+            border: 1px solid var(--border);
+        }
+        .storage-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+        .storage-header span { font-size: 11px; font-weight: 800; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; }
+        .storage-bar {
+            height: 6px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 10px;
+            overflow: hidden;
+            margin-bottom: 8px;
+        }
+        .storage-progress {
+            height: 100%;
+            background: linear-gradient(90deg, var(--accent), var(--secondary));
+            border-radius: 10px;
+            width: 0%;
+            transition: 1s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .storage-footer { font-size: 10px; color: var(--text-muted); font-weight: 600; }
+
         /* Accordion List */
         .category {
             margin-bottom: 12px;
@@ -564,12 +590,26 @@
         </div>
 
         <div class="nav-section">
-            <a href="#" class="nav-item active"><span>📂</span> Workspace</a>
+            <a href="#" class="nav-item active" onclick="switchMainView('workspace')"><span>📂</span> Workspace</a>
+            <a href="#" class="nav-item" onclick="switchMainView('files')"><span>☁️</span> Storage</a>
             <a href="#" class="nav-item"><span>🗑️</span> Trash</a>
-            <a href="#" class="nav-item"><span>⚙️</span> Settings</a>
+            <a href="#" class="nav-item" onclick="toggleSettings(true)"><span>⚙️</span> Settings</a>
             <a href="#" class="nav-item"><span>❓</span> Get Help</a>
             <a href="#" class="nav-item"><span>🎓</span> Learning Center</a>
             <a href="#" class="nav-item"><span>💬</span> Feedback</a>
+        </div>
+
+        <div class="storage-widget">
+            <div class="storage-header">
+                <span>Storage</span>
+                <span id="storage-pct" style="color: var(--accent);">0%</span>
+            </div>
+            <div class="storage-bar">
+                <div class="storage-progress" id="storage-bar" style="width: 26%;"></div>
+            </div>
+            <div class="storage-footer">
+                <span id="storage-used">26.8 GB</span> / <span id="storage-total">100 GB</span>
+            </div>
         </div>
 
         <div style="margin-top: auto;">
@@ -593,7 +633,7 @@
             </div>
         </header>
 
-        <main class="content">
+        <main class="content" id="view-workspace">
             <div class="workspace-banner">
                 <div class="workspace-icon">💎</div>
                 <div>
@@ -615,6 +655,33 @@
             </div>
         </main>
 
+        <!-- Files / Storage View -->
+        <main class="content" id="view-files" style="display: none;">
+            <div class="workspace-banner">
+                <div class="workspace-icon">☁️</div>
+                <div>
+                    <p style="font-size: 10px; font-weight: 800; color: var(--secondary); text-transform: uppercase; letter-spacing: 2px;">Raw Data Storage</p>
+                    <h2 style="font-size: 20px; font-weight: 900;">Assets & Raw Files</h2>
+                </div>
+            </div>
+
+            <div class="toolbar">
+                <button class="tool-btn primary" onclick="document.getElementById('file-upload').click()">+ UPLOAD</button>
+                <input type="file" id="file-upload" style="display: none;" multiple onchange="handleFileUpload(event)">
+                <button class="tool-btn">🔍</button>
+                <button class="tool-btn">⇅</button>
+                <button class="tool-btn" style="margin-left: auto;">⋮</button>
+            </div>
+
+            <div id="file-list">
+                <!-- Uploaded files will appear here -->
+                <div style="text-align: center; padding: 60px; color: var(--text-muted);">
+                    <div style="font-size: 40px; margin-bottom: 15px;">📁</div>
+                    <p>No raw data uploaded yet.</p>
+                </div>
+            </div>
+        </main>
+
         <div class="fab-container">
             <button class="fab">💬</button>
             <button class="fab secondary">🔗</button>
@@ -630,13 +697,27 @@
         function toggleSettings(show) {
             document.getElementById('settings-overlay').style.display = show ? 'flex' : 'none';
         }
+        function switchMainView(view) {
+            document.querySelectorAll('.content').forEach(v => v.style.display = 'none');
+            document.getElementById('view-' + view).style.display = 'block';
+            
+            document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+            event.currentTarget.classList.add('active');
+            if(window.innerWidth < 768) toggleSidebar();
+        }
         function toggleCategory(id) {
             document.getElementById(id).classList.toggle('active');
         }
         function saveSettings() {
-            // Future: Logic to save to Firestore
             toggleSettings(false);
             alert("Settings saved locally!");
+        }
+        function handleFileUpload(event) {
+            const files = event.target.files;
+            if(files.length > 0) {
+                // This will be handled in app.js
+                window.dispatchEvent(new CustomEvent('worktrace-upload', { detail: { files: Array.from(files) } }));
+            }
         }
     </script>
 </body>
